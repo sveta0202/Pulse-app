@@ -18,6 +18,7 @@
 .example-list button:hover:not(:disabled),.example-list button[aria-pressed="true"]{border-color:var(--mint);background:#203a36;color:var(--mint)}
 .example-list button:focus-visible{outline:2px solid var(--mint);outline-offset:2px}
 .example-list button[aria-pressed="true"]:disabled{opacity:1}
+.viewer{background:radial-gradient(ellipse at 50% 46%,#31504d 0%,#223534 38%,#161f24 76%)}
 @media(max-width:720px){.examples{align-items:flex-start;flex-direction:column;gap:12px;padding:14px}.examples-copy{flex:0 1 auto}}
 @media(prefers-reduced-motion:reduce){.hero-art .pulse-path{animation:none;stroke-dasharray:none;stroke-dashoffset:0}}
 </style>
@@ -128,8 +129,18 @@ function shader(type,src){const sh=gl.createShader(type);gl.shaderSource(sh,src)
 function initWebgl(){gl=canvas.getContext('webgl',{antialias:true,alpha:true,preserveDrawingBuffer:true});if(!gl){renderFallback();return}
  const vs=`attribute vec3 aPosition; attribute vec3 aNormal; attribute vec3 aColor; uniform float uYaw,uPitch,uZoom,uAspect; varying vec3 vNormal;varying vec3 vColor; varying float vDepth;
  vec3 rotate(vec3 v){float cy=cos(uYaw),sy=sin(uYaw),cp=cos(uPitch),sp=sin(uPitch);vec3 a=vec3(cy*v.x+sy*v.z,v.y,-sy*v.x+cy*v.z);return vec3(a.x,cp*a.y-sp*a.z,sp*a.y+cp*a.z);}
- void main(){vec3 p=rotate(aPosition);float depth=6.7+uZoom-p.z;gl_Position=vec4(p.x*3.15/depth/uAspect,p.y*3.15/depth,(depth-2.0)/10.0,1.0);vNormal=normalize(rotate(aNormal));vColor=aColor;vDepth=depth;}`;
- const fs=`precision mediump float;varying vec3 vNormal;varying vec3 vColor;varying float vDepth;void main(){vec3 l=normalize(vec3(-.5,1.0,1.8));float dif=max(.12,dot(normalize(vNormal),l));float spec=pow(max(dot(reflect(-l,normalize(vNormal)),vec3(0.,0.,1.)),0.),28.);vec3 c=vColor*(.38+.68*dif)+vec3(.5,.9,.85)*spec*.35;gl_FragColor=vec4(c,1.0);}`;
+ void main(){vec3 p=rotate(aPosition);float depth=6.7+uZoom-p.z;gl_Position=vec4(p.x*3.15/depth/uAspect,(p.y-.40)*3.15/depth,(depth-2.0)/10.0,1.0);vNormal=normalize(rotate(aNormal));vColor=aColor;vDepth=depth;}`;
+ const fs=`precision mediump float;
+ varying vec3 vNormal;varying vec3 vColor;
+ void main(){
+  vec3 n=normalize(vNormal),key=normalize(vec3(-.56,.78,1.25)),fill=normalize(vec3(.92,-.12,.56));
+  vec3 eye=vec3(0.,0.,1.);
+  float mainLight=max(0.,dot(n,key)),fillLight=max(0.,dot(n,fill));
+  float silk=pow(max(0.,dot(n,normalize(key+eye))),20.);
+  float rim=pow(1.-max(0.,dot(n,eye)),3.)*max(0.,dot(n,fill));
+  vec3 c=vColor*(.37+.61*mainLight+.18*fillLight)+vec3(.80,.92,.90)*silk*.15+vec3(.18,.48,.43)*rim*.28;
+  gl_FragColor=vec4(c,1.);
+ }`;
  program=gl.createProgram();gl.attachShader(program,shader(gl.VERTEX_SHADER,vs));gl.attachShader(program,shader(gl.FRAGMENT_SHADER,fs));gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(program));gl.useProgram(program);
  buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);glPos=gl.getAttribLocation(program,'aPosition');glNormal=gl.getAttribLocation(program,'aNormal');glColor=gl.getAttribLocation(program,'aColor');glYaw=gl.getUniformLocation(program,'uYaw');glPitch=gl.getUniformLocation(program,'uPitch');glZoom=gl.getUniformLocation(program,'uZoom');glAspect=gl.getUniformLocation(program,'uAspect');
  for(const loc of [glPos,glNormal,glColor])gl.enableVertexAttribArray(loc);
@@ -138,32 +149,97 @@ let vertices=[];function pushVertex(p,n,c){vertices.push(p[0],p[1],p[2],n[0],n[1
 const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]];const add=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]];const scale=(a,s)=>[a[0]*s,a[1]*s,a[2]*s];const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];const len=a=>Math.hypot(...a);const norm=a=>scale(a,1/(len(a)||1));
 function triangle(a,b,c,na,nb,nc,color){pushVertex(a,na,color);pushVertex(b,nb,color);pushVertex(c,nc,color)}
 function sphere(center,sz,color,lat=9,lon=11){for(let y=0;y<lat;y++){let a=-Math.PI/2+Math.PI*y/lat,b=-Math.PI/2+Math.PI*(y+1)/lat;for(let x=0;x<lon;x++){let c=2*Math.PI*x/lon,d=2*Math.PI*(x+1)/lon;function v(t,s){let nn=[Math.cos(t)*Math.cos(s),Math.sin(t),Math.cos(t)*Math.sin(s)];return {p:add(center,[nn[0]*sz[0],nn[1]*sz[1],nn[2]*sz[2]]),n:norm([nn[0]/sz[0],nn[1]/sz[1],nn[2]/sz[2]])}}const p=v(a,c),q=v(b,c),r=v(b,d),s=v(a,d);triangle(p.p,q.p,r.p,p.n,q.n,r.n,color);triangle(p.p,r.p,s.p,p.n,r.n,s.n,color)}}}
-function bone(a,b,r0,r1,color){const axis=norm(sub(b,a));const helper=Math.abs(axis[1])>.8?[1,0,0]:[0,1,0];const u=norm(cross(axis,helper)),v=cross(axis,u);const n=12;for(let i=0;i<n;i++){let t=i*2*Math.PI/n,s=(i+1)*2*Math.PI/n;const d0=add(scale(u,Math.cos(t)),scale(v,Math.sin(t))),d1=add(scale(u,Math.cos(s)),scale(v,Math.sin(s)));const p0=add(a,scale(d0,r0)),p1=add(a,scale(d1,r0)),q0=add(b,scale(d0,r1)),q1=add(b,scale(d1,r1));triangle(p0,q0,q1,d0,d0,d1,color);triangle(p0,q1,p1,d0,d1,d1,color)}}
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const TAU=Math.PI*2;
+const circle=n=>Array.from({length:n},(_,i)=>[Math.cos(i*TAU/n),Math.sin(i*TAU/n)]);
+const palmCircle=circle(28), fingerCircle=circle(16);
+function ringMesh(rings,color){
+ for(let j=1;j<rings.length;j++){
+  const a=rings[j-1],b=rings[j];
+  for(let k=0;k<a.length;k++){
+   const i=(k+1)%a.length,p=a[k],q=b[k],r=b[i],s=a[i];
+   triangle(p.p,q.p,r.p,p.n,q.n,r.n,color);triangle(p.p,r.p,s.p,p.n,r.n,s.n,color);
+  }
+ }
+}
+// Cross-sections describe a single rounded shell from wrist to knuckles.
+function palmShell(profile,color){
+ const rings=profile.map(([y,cx,w,d,z,slope=0],i)=>{
+  const lo=profile[Math.max(0,i-1)],hi=profile[Math.min(profile.length-1,i+1)];
+  const dy=hi[0]-lo[0];
+  return palmCircle.map(([c,s])=>{
+   const x=w*Math.sign(c)*Math.pow(Math.abs(c),.84);
+   const zz=d*Math.sign(s)*Math.pow(Math.abs(s),.86);
+   const nx=c/Math.max(.15,w),nz=s/Math.max(.08,d);
+   const ny=-((hi[2]-lo[2])*c*nx+(hi[3]-lo[3])*s*nz)/dy;
+   return {p:[cx+x,y+slope*c,z+zz],n:norm([nx,ny,nz])};
+  });
+ });
+ ringMesh(rings,color);
+}
+function fingerShell(origin,axis,length,width,thumb,tip,color){
+ const side=norm(cross(axis,thumb?[0,0,1]:[0,1,0]));
+ const helper=Math.abs(dot(axis,[0,0,1]))>.92?[1,0,0]:[0,0,1];
+ const u=thumb&&len(side)>.01?side:norm(cross(axis,helper)),v=cross(axis,u);
+ const profile=tip?[[.075,.55],[.145,.96],[.36,1],[.72,.91],[.92,.76],[1.05,.48],[1.10,.03]]:
+                   [[.08,.48],[.15,.96],[.36,1],[.71,.90],[.85,.79],[.91,.40]];
+ const rings=profile.map(([pos,r],i)=>{
+  const lo=profile[Math.max(0,i-1)],hi=profile[Math.min(profile.length-1,i+1)];
+  const slope=(hi[1]-lo[1])*width/((hi[0]-lo[0])*length);
+  const center=add(origin,scale(axis,pos*length));
+  return fingerCircle.map(([c,s])=>{
+   const radial=add(scale(u,c),scale(v,s*.85));
+   const surfaceNormal=norm(add(scale(u,c),scale(v,s/.85)));
+   return {p:add(center,scale(radial,width*r)),n:norm(add(surfaceNormal,scale(axis,-slope)))};
+  });
+ });
+ ringMesh(rings,color);
+}
 const bases=[[-.39,.40,.03],[-.11,.48,.02],[.49,.26,.02],[.20,.43,.02],[-.76,-.24,.14]];
 const lengths=[[.57,.38,.28],[.70,.45,.32],[.42,.29,.24],[.61,.40,.30],[.46,.39,.28]];
 function fingerVec(f,theta,flex){const thumb=f===4;let xx=thumb?(-.82*Math.cos(theta)-.36*Math.sin(theta)):Math.sin(theta)*.33;let yy=thumb?(.57*Math.cos(theta)-.20*Math.sin(theta)):Math.cos(theta*.28);const ln=Math.hypot(xx,yy);xx/=ln;yy/=ln;return [xx*Math.cos(flex),yy*Math.cos(flex),Math.sin(flex)]}
-function makeHand(){vertices=[];lastBases=[];
- const white=[.69,.82,.79],boneCol=[.62,.79,.74],accent=[.18,.92,.76],nailCol=[.80,.95,.90];
- sphere([0,-.27,0],[.69,.88,.19],white,15,18);
- sphere([0,-.95,0],[.52,.41,.16],[.45,.62,.59],11,16);
- // geometric hand veins/indicators, no external mesh needed
+const ceramic=[.81,.89,.86], graphite=[.105,.16,.18], steel=[.25,.36,.37];
+const mint=[.20,.92,.74], selectedCeramic=[.71,.96,.88], digitWidths=[.112,.123,.09,.107,.142];
+const palmProfile=[
+ [-1.19,-.075,.018,.013,-.045],[-1.17,-.075,.28,.10,-.045],[-1.10,-.075,.37,.155,-.044],
+ [-.89,-.078,.40,.176,-.03],[-.72,-.085,.46,.207,-.014],[-.49,-.105,.56,.24,.001],
+ [-.25,-.09,.64,.245,.008],[-.02,-.043,.643,.218,.012,-.025],[.20,-.012,.612,.180,.012,-.063],
+ [.365,.007,.518,.134,.013,-.10],[.445,.009,.40,.087,.018,-.067],[.49,-.01,.205,.038,.02,-.03],
+ [.51,-.04,.016,.014,.024]
+];
+const cuffProfile=[
+ [-1.22,-.075,.018,.012,-.045],[-1.205,-.075,.305,.118,-.045],[-1.17,-.075,.386,.164,-.044],
+ [-1.03,-.075,.393,.172,-.037],[-.98,-.075,.352,.146,-.03],[-.965,-.075,.02,.012,-.03]
+];
+function makeHand(geometry=true){vertices=[];lastBases=[];
+ if(geometry){
+  palmShell(palmProfile,ceramic);palmShell(cuffProfile,graphite);
+  sphere([-.075,-1.10,.119],[.15,.035,.027],steel,6,12);
+  sphere([-.075,-1.095,.142],[.096,.013,.008],mint,6,12);
+ }
  for(let f=0;f<5;f++){
   let curr=bases[f].slice();let all=[curr.slice()];let t=angles[f*4],f0=angles[f*4+1],f1=angles[f*4+2],f2=angles[f*4+3];
-  const jointFlex=[f0,f0+f1,f0+f1+f2];const skin=f===4?boneCol:white;
-  sphere(curr,[f===4?.145:.12,f===4?.135:.105,.11],skin,8,10);
+  const jointFlex=[f0,f0+f1,f0+f1+f2],selected=f===activeFinger;
+  const shellColor=selected?selectedCeramic:ceramic;
+  if(geometry){
+   const r=digitWidths[f];
+   if(f===4)sphere(add(curr,[.09,-.025,-.025]),[.195,.214,.175],ceramic,9,14);
+   sphere(curr,[r*.97,r*.92,r*.86],selected?mint:graphite,8,12);
+  }
   for(let j=0;j<3;j++){
-   const vec=fingerVec(f,t,jointFlex[j]);let next=add(curr,scale(vec,lengths[f][j]));let radius=(f===4?.123:.10)*(1-j*.19);
-   bone(curr,next,radius,radius*.88,j===2?nailCol:skin);
-   sphere(next,[radius*.96,radius*.96,radius*.96],j===2?nailCol:skin,9,10);
-   if(j<2)sphere(next,[radius*.82,radius*.82,radius*.82],accent,7,9);
+   const vec=fingerVec(f,t,jointFlex[j]),length=lengths[f][j],radius=digitWidths[f]*(1-j*.16);
+   const next=add(curr,scale(vec,length));
+   if(geometry){
+    fingerShell(curr,vec,length,radius,f===4,j===2,shellColor);
+    if(j<2)sphere(next,[radius*.76,radius*.78,radius*.73],selected?mint:graphite,8,12);
+   }
    curr=next;all.push(curr.slice());
   }lastBases.push(all)
  }
- return new Float32Array(vertices)}
-let vertexCount=0;
+ return geometry?new Float32Array(vertices):null}
 function renderHand(){if(!gl){renderFallback();return;}const ratio=window.devicePixelRatio||1;const w=Math.round(canvas.clientWidth*ratio),h=Math.round(canvas.clientHeight*ratio);if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h)}
  const data=makeHand();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,data,gl.DYNAMIC_DRAW);const stride=9*4;gl.vertexAttribPointer(glPos,3,gl.FLOAT,false,stride,0);gl.vertexAttribPointer(glNormal,3,gl.FLOAT,false,stride,3*4);gl.vertexAttribPointer(glColor,3,gl.FLOAT,false,stride,6*4);gl.uniform1f(glYaw,yaw);gl.uniform1f(glPitch,pitch);gl.uniform1f(glZoom,zoom);gl.uniform1f(glAspect,Math.max(.5,canvas.clientWidth/canvas.clientHeight));gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.drawArrays(gl.TRIANGLES,0,data.length/9);refreshLabels();}
-function project(p){const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);let x=cy*p[0]+sy*p[2],z=-sy*p[0]+cy*p[2],y=cp*p[1]-sp*z,z2=sp*p[1]+cp*z;const depth=6.7+zoom-z2, aspect=canvas.clientWidth/canvas.clientHeight,px=x*3.15/depth/aspect,py=y*3.15/depth;return [(px*.5+.5)*canvas.clientWidth,(-py*.5+.5)*canvas.clientHeight]}
+function project(p){const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);let x=cy*p[0]+sy*p[2],z=-sy*p[0]+cy*p[2],y=cp*p[1]-sp*z,z2=sp*p[1]+cp*z;const depth=6.7+zoom-z2,aspect=Math.max(.5,canvas.clientWidth/canvas.clientHeight),px=x*3.15/depth/aspect,py=(y-.40)*3.15/depth;return [(px*.5+.5)*canvas.clientWidth,(-py*.5+.5)*canvas.clientHeight]}
 function refreshLabels(){const layer=$('jointLabels');if(!showLabels){layer.innerHTML='';return}layer.innerHTML='';if(!lastBases.length)return;
  // Show all 20 joints as subtle points, and 4 large values for active finger
  for(let f=0;f<5;f++){for(let j=0;j<4;j++){
@@ -175,7 +251,7 @@ function renderFallback(){
  if(!w||!h)return;
  canvas.width=Math.floor(w*ratio);canvas.height=Math.floor(h*ratio);ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,w,h);
  // Software 3D perspective fallback for browsers that disable WebGL.
- makeHand();
+ makeHand(false);
  function ellipse(center,rx,ry,fill,shadow){const [x,y]=project(center);const r=w/700;ctx.beginPath();ctx.ellipse(x,y,Math.max(1,rx*r*100),Math.max(1,ry*r*100),yaw*.25,0,Math.PI*2);ctx.fillStyle=fill;if(shadow){ctx.shadowColor=shadow;ctx.shadowBlur=24}ctx.fill();ctx.shadowBlur=0}
  const p=(x,y,z=0)=>project([x,y,z]);
  function segment(a,b,width,col){const q=p(...a),r=p(...b);let thickness=Math.max(2,width*w/690);ctx.save();ctx.strokeStyle='#0a3030';ctx.lineWidth=thickness+5;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(...q);ctx.lineTo(...r);ctx.stroke();const g=ctx.createLinearGradient(q[0],q[1],r[0],r[1]);g.addColorStop(0,'#6b9e94');g.addColorStop(.5,col);g.addColorStop(1,'#b8e2d6');ctx.strokeStyle=g;ctx.lineWidth=thickness;ctx.beginPath();ctx.moveTo(...q);ctx.lineTo(...r);ctx.stroke();ctx.restore()}
@@ -187,7 +263,7 @@ function renderFallback(){
  for(let f=0;f<5;f++){
   const positions=lastBases[f];let radius=f===4?25:21;
   for(let j=0;j<3;j++){
-   segment(positions[j],positions[j+1],radius*(1-j*.18),f===activeFinger?'#a7f0d8':'#a1cac1');const [jx,jy]=project(positions[j+1]);ctx.beginPath();ctx.arc(jx,jy,Math.max(4,(radius*(1-j*.2))*w/1350),0,Math.PI*2);ctx.fillStyle=(j===2?'#ebfff4':'#72cdbc');ctx.fill();ctx.strokeStyle='#315950';ctx.stroke();
+   segment(positions[j],positions[j+1],radius*(1-j*.18),f===activeFinger?'#a7f0d8':'#dceae5');if(j===2)continue;const [jx,jy]=project(positions[j+1]);ctx.beginPath();ctx.arc(jx,jy,Math.max(3,(radius*(1-j*.2))*w/1650),0,Math.PI*2);ctx.fillStyle=f===activeFinger?'#22cdb7':'#263e42';ctx.fill();ctx.strokeStyle='#708a84';ctx.stroke();
   }
  }
  refreshLabels();
