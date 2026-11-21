@@ -45,6 +45,16 @@ def create_app(weights=None):
     async def index():
         return FileResponse(ROOT / "static/index.html", headers={"Cache-Control": "no-cache"})
 
+    @app.get("/examples/{example_id}", include_in_schema=False)
+    async def example(example_id: str):
+        if example_id not in {"01", "02", "03", "04", "05"}:
+            return PlainTextResponse("Запись не найдена.", status_code=404)
+        path = ROOT / "static" / "examples" / f"record-{example_id}.npy"
+        if not path.is_file():
+            return PlainTextResponse("Файл примера не установлен на сервере.", status_code=404)
+        return FileResponse(path, media_type="application/octet-stream",
+                            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
     @app.get("/healthz")
     async def health():
         ready = app.state.model is not None

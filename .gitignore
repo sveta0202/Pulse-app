@@ -8,6 +8,7 @@ data/
 outputs/
 work_lite/
 *.npy
+!static/examples/record-0[1-5].npy
 *.tmp
 weights/*
 !weights/.gitkeep
