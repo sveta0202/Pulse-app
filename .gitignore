@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+.pytest_cache/
+node_modules/
+.env
+.env.*
+data/
+outputs/
+work_lite/
+*.npy
+*.tmp
+weights/*
+!weights/.gitkeep
+!weights/pulse.pt
+railway-plan.json

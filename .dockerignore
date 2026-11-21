@@ -1,0 +1,13 @@
+.git
+.github
+.railway
+.venv
+node_modules
+**/__pycache__
+.env*
+data
+outputs
+work_lite
+tests
+*.zip
+*.tmp
